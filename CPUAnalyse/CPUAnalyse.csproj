@@ -37,16 +37,16 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Samples.Debugging.CorApi">
-      <HintPath>..\DLL\Microsoft.Samples.Debugging.CorApi.dll</HintPath>
+      <HintPath>..\Dlls\Microsoft.Samples.Debugging.CorApi.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Samples.Debugging.CorApi.NativeApi">
-      <HintPath>..\DLL\Microsoft.Samples.Debugging.CorApi.NativeApi.dll</HintPath>
+      <HintPath>..\Dlls\Microsoft.Samples.Debugging.CorApi.NativeApi.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Samples.Debugging.MdbgEngine">
-      <HintPath>..\DLL\Microsoft.Samples.Debugging.MdbgEngine.dll</HintPath>
+      <HintPath>..\Dlls\Microsoft.Samples.Debugging.MdbgEngine.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Samples.Debugging.Native">
-      <HintPath>..\DLL\Microsoft.Samples.Debugging.Native.dll</HintPath>
+      <HintPath>..\Dlls\Microsoft.Samples.Debugging.Native.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
