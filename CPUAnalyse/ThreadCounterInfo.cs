@@ -12,6 +12,8 @@ namespace CPUAnalyse
         public PerformanceCounter IdCounter;
         public PerformanceCounter ProcessorTimeCounter;
 
+        public string ThreadID = string.Empty;
+
         public ThreadCounterInfo(PerformanceCounter counter1, PerformanceCounter counter2)
         {
             IdCounter = counter1;

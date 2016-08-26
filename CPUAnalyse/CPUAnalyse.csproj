@@ -24,11 +24,11 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <PlatformTarget>x64</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;x64</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
@@ -37,16 +37,16 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Samples.Debugging.CorApi">
-      <HintPath>..\Dlls\Microsoft.Samples.Debugging.CorApi.dll</HintPath>
+      <HintPath>..\DLL\Microsoft.Samples.Debugging.CorApi.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Samples.Debugging.CorApi.NativeApi">
-      <HintPath>..\Dlls\Microsoft.Samples.Debugging.CorApi.NativeApi.dll</HintPath>
+      <HintPath>..\DLL\Microsoft.Samples.Debugging.CorApi.NativeApi.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Samples.Debugging.MdbgEngine">
-      <HintPath>..\Dlls\Microsoft.Samples.Debugging.MdbgEngine.dll</HintPath>
+      <HintPath>..\DLL\Microsoft.Samples.Debugging.MdbgEngine.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Samples.Debugging.Native">
-      <HintPath>..\Dlls\Microsoft.Samples.Debugging.Native.dll</HintPath>
+      <HintPath>..\DLL\Microsoft.Samples.Debugging.Native.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />

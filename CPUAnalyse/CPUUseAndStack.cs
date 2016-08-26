@@ -33,73 +33,102 @@ namespace CPUAnalyse
         /// </summary>
         public int? PID = null;
 
-        public  void Run()
+        /// <summary>
+        /// 进程实例后缀
+        /// </summary>
+        private string ProcessPostFix = string.Empty;
+
+        private Process TheProcess = null;
+
+        private void GetProcessPostFix(string processName)
         {
-            if(PID == null)
+            // 通过计数器类型 Process 来获取实例编号与进程ID的关系
+            var processCate = new PerformanceCounterCategory("Process");
+            var processInstances = processCate.GetInstanceNames();
+            foreach (var p in processInstances)
+            {
+                if (p.StartsWith(processName, StringComparison.CurrentCultureIgnoreCase))
+                {
+                    var counter = new PerformanceCounter("Process", "ID Process", p, true);
+                    var currentPID = (int)counter.NextSample().RawValue;
+                    if (currentPID == PID)
+                    {
+                        if (p.Contains("#"))
+                        {
+                            var charIndex = p.IndexOf("#");
+                            this.ProcessPostFix = p.Substring(charIndex);
+                        }
+
+                        break;
+                    }
+                }
+            }
+        }
+
+        private void CreatePerformanceCounter(string processName, PerformanceCounterCategory cate, Dictionary<string, ThreadCounterInfo> counters)
+        {
+            string[] instances = cate.GetInstanceNames();
+            foreach (string instance in instances)
+            {
+                if (instance.StartsWith(processName, StringComparison.CurrentCultureIgnoreCase)
+                    && ( 
+                         (string.IsNullOrWhiteSpace(this.ProcessPostFix) && !instance.Contains("#")) ||
+                         (!string.IsNullOrWhiteSpace(this.ProcessPostFix) && instance.EndsWith(this.ProcessPostFix))
+                       )
+                   )
+                {
+                    var counter1 =
+                        new PerformanceCounter("Thread", "ID Thread", instance, true);
+                    var counter2 =
+                        new PerformanceCounter("Thread", "% Processor Time", instance, true);
+                    counters.Add(instance, new ThreadCounterInfo(counter1, counter2));
+
+                }
+            }
+        }
+
+        public void Run()
+        {
+            if (PID == null)
             {
                 throw new Exception("pid can not empty");
             }
 
             try
             {
+                Console.WriteLine($"starting {DateTime.Now.ToString("mm: ss.fff")}...");
+
                 int pid = PID.Value;
 
                 var sb = new StringBuilder();
-                Process process = Process.GetProcessById(pid);
+                this.TheProcess = Process.GetProcessById(pid);
                 var counters = new Dictionary<string, ThreadCounterInfo>();
                 var threadInfos = new Dictionary<string, ThreadOutputInfo>();
 
                 sb.AppendFormat(
                     @"<html><head><title>{0}</title><style type=""text/css"">table, td{{border: 1px solid #000;border-collapse: collapse;}}</style></head><body>",
-                    process.ProcessName);
+                    this.TheProcess.ProcessName);
 
                 #region 计数器
 
-                Console.WriteLine("开始收集计数器...");
+                Console.WriteLine("start create performance counter ...");
+
+                Console.WriteLine($"start get process postfix {DateTime.Now.ToString("mm:ss.fff")}...");
+                this.GetProcessPostFix(this.TheProcess.ProcessName);
+                Console.WriteLine($"end get process postfix {DateTime.Now.ToString("mm:ss.fff")}...");
 
                 var cate = new PerformanceCounterCategory("Thread");
-                string[] instances = cate.GetInstanceNames();
-                foreach (string instance in instances)
-                {
-                    if (instance.StartsWith(process.ProcessName, StringComparison.CurrentCultureIgnoreCase))
-                    {
-                        var counter1 =
-                            new PerformanceCounter("Thread", "ID Thread", instance, true);
-                        var counter2 =
-                            new PerformanceCounter("Thread", "% Processor Time", instance, true);
-                        counters.Add(instance, new ThreadCounterInfo(counter1, counter2));
-                        
-                    }
-                }
-
-                foreach (var pair in counters)
-                {
-                    try
-                    {
-                        var info = new ThreadOutputInfo();
-
-                        info.Id = pair.Value.IdCounter.NextValue().ToString();
-                        info.ProcessorTimePercentage = pair.Value.ProcessorTimeCounter.NextValue().ToString("0.0");
-
-                        threadInfos.Add(info.Id, info);
-                        Console.WriteLine($"已初始化{info.Id}样本");
-                    }
-                    catch (Exception ex)
-                    {
-                        WriteErrorLog("性能计数器初始化样本时出错:" + ex.ToString() + Environment.NewLine);
-                        Console.WriteLine($"性能计数器初始化样本时有出错,具体请看Log {LogFile} 文件");
-                    }
-                }
+                CreatePerformanceCounter(this.TheProcess.ProcessName, cate, counters);
 
                 #endregion
 
                 // 连续抓起样本
-                PointInfo(pid, counters, threadInfos, Count, Interval);
+                PointInfo(pid, counters, threadInfos, Count, Interval, cate);
 
                 #region 线程信息
 
-                Console.WriteLine("开始收集线程信息...");
-                ProcessThreadCollection collection = process.Threads;
+                Console.WriteLine("start collect thread info ...");
+                ProcessThreadCollection collection = this.TheProcess.Threads;
                 foreach (ProcessThread thread in collection)
                 {
                     try
@@ -113,12 +142,12 @@ namespace CPUAnalyse
                             info.StartTime = thread.StartTime.ToString();
                         }
 
-                        Console.WriteLine($"已收集线程 {thread.Id} 信息");
+                        Console.WriteLine($"had collect thread {thread.Id} info");
                     }
-                    catch(Exception ex)
+                    catch (Exception ex)
                     {
                         WriteErrorLog("获取线程的CPU时间时出错:" + ex.ToString() + Environment.NewLine);
-                        Console.WriteLine($"获取线程的CPU时间时有出错,具体请看Log {LogFile} 文件");
+                        Console.WriteLine($"an exception occur when get thread info, Log file {LogFile} for detail");
                     }
                 }
 
@@ -128,10 +157,10 @@ namespace CPUAnalyse
 
                 try
                 {
-                    Console.WriteLine("开始生成报表...");
+                    Console.WriteLine("start generating report ...");
 
                     var infoList = threadInfos.Values.ToList()
-                        .Where(p => !string.IsNullOrWhiteSpace(p.ProcessorTimePercentage) && float.Parse(p.ProcessorTimePercentage) > FilterCPUUse )
+                        .Where(p => !string.IsNullOrWhiteSpace(p.ProcessorTimePercentage) && float.Parse(p.ProcessorTimePercentage) > FilterCPUUse)
                         .ToList();
                     infoList.Sort(new ThreadOutputCompare());
                     foreach (var info in infoList)
@@ -140,114 +169,189 @@ namespace CPUAnalyse
                         sb.Append("<hr />");
                     }
                     sb.Append("</body></html>");
-                    
-                    using (var sw = new StreamWriter(process.ProcessName + ".htm", false,
+
+                    using (var sw = new StreamWriter(this.TheProcess.ProcessName + ".htm", false,
                                                      Encoding.Default))
                     {
                         sw.Write(sb.ToString());
                     }
 
-                    Console.WriteLine("已生成报表");
+                    Console.WriteLine("had generated report");
 
-                    Process.Start(process.ProcessName + ".htm");
+                    var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"{this.TheProcess.ProcessName}_{DateTime.Now.ToString("yyyyMMddhhmmss")}.htm");
+                    File.WriteAllText(path, sb.ToString());
+
+                    Process.Start($"{this.TheProcess.ProcessName}.htm");
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
                     WriteErrorLog("生成报表时出错:" + ex.ToString() + Environment.NewLine);
-                    Console.WriteLine($"生成报表时有出错,具体请看Log {LogFile} 文件");
+                    Console.WriteLine($"an exception occur when generated report, Log file {LogFile} for detail");
                 }
 
                 #endregion
+
+                Console.WriteLine($"end all {DateTime.Now.ToString("mm: ss.fff")}");
             }
             catch (Exception ex)
             {
                 WriteErrorLog("其它出错:" + ex.ToString() + Environment.NewLine);
-                Console.WriteLine($"其它出错,具体请看Log {LogFile} 文件");
+                Console.WriteLine($"an exception occur,Log file {LogFile} for detail");
             }
         }
 
-        private  void PointInfo(int pid, Dictionary<string, ThreadCounterInfo> counters, Dictionary<string, ThreadOutputInfo> threadInfos, int count, int interval)
+
+        private List<string> GetCurrentThreadIDList()
+        {
+            var ths = this.TheProcess.Threads;
+            var result = new List<string>();
+            foreach(ProcessThread t in ths)
+            {
+                result.Add(t.Id.ToString());
+            }
+
+            return result;
+        }
+
+        private  void PointInfo(int pid, Dictionary<string, ThreadCounterInfo> counters,
+                                Dictionary<string, ThreadOutputInfo> threadInfos, int count, int interval,
+                                PerformanceCounterCategory cate)
         {
             var index = 0;
             while (count > 0)
             {
                 count--;
                 index++;
-                Thread.Sleep(interval);
+
+                var threadIdList = GetCurrentThreadIDList();
+                var willRemoveCounter = new List<string>();
                 foreach (var pair in counters)
                 {
                     try
                     {
-                        var threadID = pair.Value.IdCounter.NextValue().ToString();
-                        var processorTimePercentage = pair.Value.ProcessorTimeCounter.NextValue().ToString("0.0");
-
-                        Console.WriteLine($"已抓起 {threadID} 的第 {index} 次样本");
-
-                        ThreadOutputInfo info;
-                        if (threadInfos.TryGetValue(threadID, out info))
+                        // 第一次因为没有 threadID，所以要用 InstanceExists 来判断
+                        if (index == 1 && !cate.InstanceExists(pair.Key))
                         {
-                            info.ProcessorTimePercentage = processorTimePercentage;
+                            willRemoveCounter.Add(pair.Key);
+                            Console.WriteLine($"thread {pair.Value?.ThreadID ?? string.Empty} not exist when get {index} sample");
+                            continue;
                         }
+                        else if(index > 1)// 第二次及以上使用另外方法判断，因为第一种方式慢
+                        {
+                            if(!threadIdList.Contains(pair.Value.ThreadID))
+                            {
+                                willRemoveCounter.Add(pair.Key);
+                                Console.WriteLine($"thread {pair.Value.ThreadID} not exist when get {index} sample");
+                                continue;
+                            }
+                        }
+
+                        // cpu使用率
+                        var processorTimeCounterValue = pair.Value.ProcessorTimeCounter.NextValue();
+
+                        // 第一次，创建 ThreadOutputInfo 对象
+                        if (index == 1)
+                        {
+                            var info = new ThreadOutputInfo();
+                            info.ProcessorTimePercentage = processorTimeCounterValue.ToString("0.0");
+                            info.Id = pair.Value.IdCounter.NextValue().ToString();
+                            pair.Value.ThreadID = info.Id;
+                            threadInfos.Add(info.Id, info);
+                        }
+                        // 第二次及以上，使用率低的排除掉
+                        else if (processorTimeCounterValue < FilterCPUUse)
+                        {
+                            willRemoveCounter.Add(pair.Key);
+                        }
+                        else // 第二次及以上，不需要排除的，更新 ThreadOutputInfo 对象 
+                        {
+                            ThreadOutputInfo info;
+                            if (threadInfos.TryGetValue(pair.Value.ThreadID, out info))
+                            {
+                                info.ProcessorTimePercentage = processorTimeCounterValue.ToString("0.0");
+                            }
+                        }
+                        
+                        Console.WriteLine($"had got {pair.Value.ThreadID}'s {index} sample");                        
                     }
                     catch(Exception ex)
                     {
-                        WriteErrorLog("性能计数器取样本时出错:" + ex.ToString() + Environment.NewLine);
-                        Console.WriteLine($"性能计数器取样本时有出错,具体请看Log {LogFile} 文件");
+                        willRemoveCounter.Add(pair.Key);
+                        WriteErrorLog("Performance counter has an exception when get sample:" + ex.ToString() + Environment.NewLine);
+                        Console.WriteLine($"an exception occur when get sample, log file {LogFile} for detail");
                     }
                 }
 
+                // 删除已不存在或出错的实例计数器
+                willRemoveCounter.ForEach(p => counters.Remove(p));
 
-                var debugger = new MDbgEngine();
-                MDbgProcess proc = null;
-                try
+                // 获取堆栈
+                GetCurrentCallStack(counters, threadInfos);
+
+                // 睡眠指定间隔
+                Thread.Sleep(interval);
+            }
+        }
+
+        private void GetCurrentCallStack(Dictionary<string, ThreadCounterInfo> counters, Dictionary<string, ThreadOutputInfo> threadInfos)
+        {
+            var debugger = new MDbgEngine();
+            MDbgProcess proc = null;
+            try
+            {
+                Console.WriteLine($"start attack to {PID} to get call stack");
+
+                proc = debugger.Attach((int)PID);
+                DrainAttach(debugger, proc);
+
+                Console.WriteLine($"had attacked to {PID}");
+
+                var counterThreadIDList = counters.Select(p => p.Value.ThreadID).ToList();
+                MDbgThreadCollection tc = proc.Threads;
+                foreach (MDbgThread t in tc)
                 {
-                    Console.WriteLine($"开始附加到进程 {pid} 以获取堆栈");
-
-                    proc = debugger.Attach(pid);
-                    DrainAttach(debugger, proc);
-
-                    Console.WriteLine($"已附加到进程 {pid}");
-
-                    MDbgThreadCollection tc = proc.Threads;
-                    foreach (MDbgThread t in tc)
+                    try
                     {
-                        try
+                        // 计数器没有的线程，不拿堆栈
+                        if (!counterThreadIDList.Contains(t.Id.ToString()))
                         {
-                            Console.WriteLine($"开始获取线程 {t.Id} 的当前堆栈");
-
-                            var tempStrs = new StringBuilder();
-                            foreach (MDbgFrame f in t.Frames)
-                            {
-                                tempStrs.AppendFormat("<br />" + f);
-                            }
-                            ThreadOutputInfo info;
-                            if (threadInfos.TryGetValue(t.Id.ToString(), out info))
-                            {
-                                var stack = $"{DateTime.Now.ToString()}<br/>";
-                                stack = stack + (tempStrs.Length == 0 ? "no managment call stack" : tempStrs.ToString());
-                                info.CallStack.Add(stack);
-                            }
-
-                            Console.WriteLine($"已获取线程 {t.Number} 的当前堆栈");
+                            continue;
                         }
-                        catch (Exception ee)
+
+                        Console.WriteLine($"start get {t.Id}'s call stack");
+
+                        var tempStrs = new StringBuilder();
+                        foreach (MDbgFrame f in t.Frames)
                         {
-                            WriteErrorLog("获取堆栈时出错:" + ee.ToString() + Environment.NewLine);
-                            Console.WriteLine($"获取线程 {t.Number} 的当前堆栈时有出错,具体请看Log {LogFile} 文件");
+                            tempStrs.AppendFormat("<br />" + f);
                         }
+                        ThreadOutputInfo info;
+                        if (threadInfos.TryGetValue(t.Id.ToString(), out info))
+                        {
+                            var stack = $"{DateTime.Now.ToString()}<br/>";
+                            stack = stack + (tempStrs.Length == 0 ? "no managment call stack" : tempStrs.ToString());
+                            info.CallStack.Add(stack);
+                        }
+
+                        Console.WriteLine($"had got {t.Id}'s call stack");
                     }
-                }
-                catch (Exception ex)
-                {
-                    WriteErrorLog("附加到进程时出错:" + ex.ToString() + Environment.NewLine);
-                    Console.WriteLine($"附加到进程时出错,具体请看Log {LogFile} 文件");
-                }
-                finally
-                {
-                    if (proc != null)
+                    catch (Exception ee)
                     {
-                        proc.Detach().WaitOne();
+                        WriteErrorLog("获取堆栈时出错:" + ee.ToString() + Environment.NewLine);
+                        Console.WriteLine($"an exception occur when got {t.Number}'s call stack, Log file {LogFile} for detail");
                     }
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteErrorLog("附加到进程时出错:" + ex.ToString() + Environment.NewLine);
+                Console.WriteLine($"an exception occur when attack to process, Log file {LogFile} for detail");
+            }
+            finally
+            {
+                if (proc != null)
+                {
+                    proc.Detach().WaitOne();
                 }
             }
         }
